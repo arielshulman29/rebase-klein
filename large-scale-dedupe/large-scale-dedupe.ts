@@ -24,8 +24,8 @@ if it is not, we add it and write it to the output file
 if it is, we skip it
 
 in the worst case where each row is unique then we will have 5,000,000*hash size
-if we try to implement SHA1 for example, that creates a 20byte hash
-then we will have 5,000,000*20 = 100,000,000 bytes = 100MB
+if the hash size is 32 bytes
+then we will have 5,000,000*32 = 160,000,000 bytes = 160MB
 */
 
 
@@ -35,15 +35,16 @@ import { HashSet } from './hashmap.ts';
 const linesHashes = new HashSet();
 
 export default async function dedupe() {
+    let linesCount = 0;
     for await (const line of readLineFromFile('./example.txt')) {
         if (linesHashes.has(line)) {
-            console.log('line already exists', line);
         } else {
-            console.log('adding line', line);
             linesHashes.add(line);
             writeLineToFile('./output.txt', line);
         }
+        linesCount++;
     }
+    console.log(`done. ${linesCount} lines processed. ${linesHashes.size} unique lines written.`);
 }
 
 dedupe();

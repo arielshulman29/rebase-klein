@@ -88,8 +88,8 @@ class LinkedHashList {
 }
 
 export class HashSet {
+    size: number;
     private buckets: Array<LinkedHashList>;
-    private size: number;
     private count: number;
 
     constructor(size = 8) {
