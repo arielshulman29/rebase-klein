@@ -37,8 +37,7 @@ const linesHashes = new HashSet();
 export default async function dedupe() {
     let linesCount = 0;
     for await (const line of readLineFromFile('./example.txt')) {
-        if (linesHashes.has(line)) {
-        } else {
+        if (!linesHashes.has(line)) {
             linesHashes.add(line);
             writeLineToFile('./output.txt', line);
         }
