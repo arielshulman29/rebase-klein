@@ -13,7 +13,6 @@ function reHash(hash: Hashed): Hashed {
     return hash << 1 as Hashed;
 }
 
-
 class HashNode {
     value: Hashed;
     next: HashNode | null;
@@ -36,30 +35,40 @@ class HashNode {
 
 class LinkedHashList {
     private head: HashNode | null;
+    private tail: HashNode | null;
     private count: number;
     constructor() {
         this.head = null;
+        this.tail = null;
         this.count = 0;
     }
     clear() {
         this.head = null;
+        this.tail = null;
         this.count = 0;
     }
     add(value: Hashed) {
         if (this.head) {
-            const node = new HashNode(value, this.head);
-            this.head.setNext(node);
+            const node = new HashNode(value, this.tail);
+            if (this.tail) {
+                this.tail.setNext(node);
+            }
+            this.tail = node;
             this.count++;
         } else {
             this.head = new HashNode(value, null);
+            this.tail = this.head;
             this.count++;
         }
     }
     getCount() {
         return this.count;
     }
-    get() {
+    getHead() {
         return this.head;
+    }
+    getTail() {
+        return this.tail;
     }
     isInBucket(value: Hashed) {
         for (const node of this) {
@@ -96,7 +105,7 @@ export class HashSet {
         for (let oldBucketIndex = 0; oldBucketIndex < oldBuckets.length; oldBucketIndex++) {
             const oldBucket = oldBuckets[oldBucketIndex];
             for (const node of oldBucket) {
-                this.reAdd(node.value);
+                this.addHash(node.value);
                 node.setParent(null);
                 this.count++;
             }
@@ -121,7 +130,7 @@ export class HashSet {
         this.count++;
     }
 
-    private reAdd(hash: Hashed): void {
+    private addHash(hash: Hashed): void {
         const [newHash, index] = this.reHash(hash);
         const bucket = this.buckets[index];
         bucket.add(newHash);

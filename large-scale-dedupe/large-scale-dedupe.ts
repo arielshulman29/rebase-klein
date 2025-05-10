@@ -19,8 +19,8 @@ Calculations:
 Strategy:
 create a hash function that would represent the content of a line
 we actually don't need to know what the hash represents, just if it already appeared
-we process line by line and hash the row content and check if is already in the set
-if it is not, we add it to the set and write it to the output file
+we process line by line and hash the row content and check if is already in the hashset
+if it is not, we add it and write it to the output file
 if it is, we skip it
 
 in the worst case where each row is unique then we will have 5,000,000*hash size
@@ -30,15 +30,20 @@ then we will have 5,000,000*20 = 100,000,000 bytes = 100MB
 
 
 import { readLineFromFile, writeLineToFile } from '../file-service.ts'
+import { HashSet } from './hashmap.ts';
 
+const linesHashes = new HashSet();
 
-// const linesHashes = new Set<Hashed>();
-
-for await (const line of readLineFromFile('./example.txt')) {
-    // const hash = simpleHash(line);
-    // if (linesHashes.has(hash)) {
-    //     continue;
-    // }
-    // linesHashes.add(hash);
-    writeLineToFile('./output.txt', line);
+export default async function dedupe() {
+    for await (const line of readLineFromFile('./example.txt')) {
+        if (linesHashes.has(line)) {
+            console.log('line already exists', line);
+        } else {
+            console.log('adding line', line);
+            linesHashes.add(line);
+            writeLineToFile('./output.txt', line);
+        }
+    }
 }
+
+dedupe();
