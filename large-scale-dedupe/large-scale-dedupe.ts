@@ -7,14 +7,15 @@ Limitations
 Pure code
 Single machine, with:
 1 CPU
-8 GB of RAM
-500 GB of disk size
+1 GB of RAM
+500 MB of disk size
 */
 
 /*
 Calculations:
-10k chars = 10KB 
-5,000,000 lines = 5,000,000*10KB = 50,000,000KB = 50GB
+1k chars = 1KB 
+5,000 lines = 5,000*1KB = 50,000KB = 5MB
+
 
 Strategy:
 create a hash function that would represent the content of a line
@@ -25,25 +26,28 @@ if it is, we skip it
 
 in the worst case where each row is unique then we will have 5,000,000*hash size
 if the hash size is 32 bytes
-then we will have 5,000,000*32 = 160,000,000 bytes = 160MB
+then we will have 5,000*32 = 160,000,000 bytes = 160MB
 */
 
-
-import { readLineFromFile, writeLineToFile } from '../file-service.ts'
-import { HashSet } from './hashmap.ts';
+import { readLineFromFile, writeLineToFile } from "../file-service.ts";
+import { HashSet } from "./hashmap.ts";
 
 const linesHashes = new HashSet();
 
 export default async function dedupe() {
-    let linesCount = 0;
-    for await (const line of readLineFromFile('./example.txt')) {
-        if (!linesHashes.has(line)) {
-            linesHashes.add(line);
-            writeLineToFile('./output.txt', line);
-        }
-        linesCount++;
+  let linesCount = 0;
+  for await (const line of readLineFromFile("bigfile_1.txt")) {
+    if (!linesHashes.has(line)) {
+      linesHashes.add(line);
+      writeLineToFile("output.txt", line);
+    } else {
+      console.log(`index ${linesCount} duplicate line`);
     }
-    console.log(`done. ${linesCount} lines processed. ${linesHashes.size} unique lines written.`);
+    linesCount++;
+  }
+  console.log(
+    `done. ${linesCount} lines processed. ${linesHashes.count} unique lines written.`
+  );
 }
 
 dedupe();

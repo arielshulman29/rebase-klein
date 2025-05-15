@@ -88,9 +88,9 @@ class LinkedHashList {
 }
 
 export class HashSet {
-    size: number;
+    private size: number;
     private buckets: Array<LinkedHashList>;
-    private count: number;
+    count: number;
 
     constructor(size = 8) {
         this.size = size;
@@ -123,18 +123,23 @@ export class HashSet {
         return [hashed, hashed % this.size] as [Hashed, number];
     }
 
-    add(value: string): void {
-        const [hash, index] = this.hash(value);
-        const bucket = this.buckets[index];
-        bucket.add(hash);
-        this.count++;
-    }
-
     private addHash(hash: Hashed): void {
         const [newHash, index] = this.reHash(hash);
         const bucket = this.buckets[index];
         bucket.add(newHash);
         this.count++;
+    }
+
+    add(value: string): void {
+        const [hash, index] = this.hash(value);
+        const bucket = this.buckets[index];
+        bucket.add(hash);
+        this.count++;
+        if (this.count % 1000 === 0) {
+            this.buckets.forEach((b, i) => {
+                console.log(`bucket ${i + 1} count: ${b.getCount()}`);
+            });
+        }
     }
 
     has(value: string): boolean {
