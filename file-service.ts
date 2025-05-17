@@ -31,6 +31,9 @@ export async function* readChunkOfNumbersFromFile(fileName: string, chunkSize: n
             chunk = [];
         }
     }
+    if (chunk.length > 0) {
+        yield chunk;
+    }
 }
 
 

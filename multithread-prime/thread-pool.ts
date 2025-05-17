@@ -20,12 +20,8 @@ export class ThreadPool {
                     this.primeCount += message;
                     console.log(`Prime count: ${this.primeCount}`)
                 }
-                this.threadsStatus[i] = false;
             });
 
-            worker.on('error', (error) => {
-                this.threadsStatus[i] = false;
-            });
             this.threads.push(worker);
         }
     }
@@ -35,7 +31,9 @@ export class ThreadPool {
         const worker = this.threads[freeThreadIndex]!;
         this.threadsStatus[freeThreadIndex] = true;
         return new Promise((resolve) => {
+            this.threadsStatus[freeThreadIndex] = false;
             resolve(worker.postMessage(numbers));
+            this.threadsStatus[freeThreadIndex] = true;
             
         });
     }
