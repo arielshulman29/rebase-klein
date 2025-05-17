@@ -29,15 +29,12 @@ start without multithreading:
 - start timer
 - create a queue of numbers to check
 - we're goint to read the file in chunks and push each chunk to the queue
-- read the file line by line
-- enqueue each chunk of numbers
 - for each chunk, count the number of primes
 - when the file is read, print the prime count and the time it took
 
 then, with multithreading:
 - start timer
-- create a counter array with the length of the number of cores
-- create a queue of chunks of numbers to check
+- create a queue of chunks of numbers to check (read the file in chunks and push each chunk to the queue)
 - instantiate a thread pool with the number of cores
 - for each core, dequeue a chunk of numbers and check if they are prime
 - if they are prime, increment the prime count
@@ -70,14 +67,13 @@ class ReadFileToQueue {
         }
     }
 
-    async* dequeueChunk() {
+    *dequeueChunk() {
         while (this.numbersQueue.length > 0) {
             const chunk = this.numbersQueue.shift();
             yield chunk;
-            if(this.numbersQueue.length < this.maxQueueSize) await this.enqueueChunk(2);
         }
     }
-    [Symbol.asyncIterator]() {
+    [Symbol.iterator]() {
         return this.dequeueChunk();
     }
     
@@ -103,24 +99,22 @@ class ReadFileToQueue {
 async function largeScalePrimeCountMultiThreaded(filePath: string) {
     const startTime = performance.now();
     const threadPool = new ThreadPool("./worker.ts", 16);
-    const numbersQueue = new ReadFileToQueue(filePath, 1_000_000, 10);
+    const numbersQueue = new ReadFileToQueue(filePath, 100_000, 16);
     let chunkCount = 0;
-    await numbersQueue.enqueueChunk();
-    for await (const chunk of numbersQueue) {
-        chunkCount++;
-        console.log(`Chunk: ${chunkCount}`);
-        if(chunk) await threadPool.sendWork(chunk);
+    await numbersQueue.enqueueChunk(16);
+    while(!numbersQueue.done && threadPool.getAvailableThreads() > 0) {
+        for (const chunk of numbersQueue) {
+            chunkCount++;
+            if(chunk) await threadPool.sendWork(chunk);
+        }
+        await numbersQueue.enqueueChunk(4);
     }
     await threadPool.tearUp();
     const primeCount = threadPool.getPrimeCount();
     const endTime = performance.now();
     console.log(`Prime count: ${primeCount} Time it took: ${(endTime - startTime)/1000} seconds`);
 }
-// largeScalePrimeCountMultiThreaded("./smallTest.txt") //took 0.001 seconds
 const asyncWrapper = async (func: () => Promise<void>) => {
     await func();
 }
 asyncWrapper(()=>largeScalePrimeCountMultiThreaded("./nums_50_mil.txt"));
-// asyncWrapper(()=>largeScalePrimeCountMultiThreaded("./smallTest.txt"));
-//suposebly from the small file we should have 46 primes (23 not prime)
-// largeScalePrimeCountSingleThreaded("nums_50_mil.txt") //took 363.559 seconds

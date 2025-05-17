@@ -30,17 +30,20 @@ export class ThreadPool {
             this.threads.push(worker);
         }
     }
+    getAvailableThreads() {
+        return this.threadsStatus.filter((status) => status === false).length;
+    }
     sendWork(numbers: number[]) {
         const currentIndex = this.workloadCount%this.threadsStatus.length;
         const freeThreadIndex = this.threadsStatus[currentIndex] ? this.threadsStatus.findIndex((status) => status === false) : currentIndex;
-        if(freeThreadIndex === -1) {
-            console.log("No free threads")
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    resolve(this.sendWork(numbers));
-                }, 100);
-            });
-        }
+        // if(freeThreadIndex === -1) {
+        //     console.log("No free threads")
+        //     return new Promise((resolve) => {
+        //         setTimeout(() => {
+        //             resolve(this.sendWork(numbers));
+        //         }, 100);
+        //     });
+        // }
         this.workloadCount++;
         const worker = this.threads[freeThreadIndex]!;
         return new Promise((resolve) => {
