@@ -16,6 +16,23 @@ export async function* readLineFromFile(fileName: string) {
     }
 }
 
+export async function* readChunkOfNumbersFromFile(fileName: string, chunkSize: number) {
+    const fileStream = fs.createReadStream(fileName);
+    const rl = readline.createInterface({
+        input: fileStream,
+        crlfDelay: Infinity
+    });
+
+    let chunk: number[] = [];
+    for await (const line of rl) {
+        chunk.push(parseInt(line.trim()));
+        if (chunk.length === chunkSize) {
+            yield chunk;
+            chunk = [];
+        }
+    }
+}
+
 
 
 export async function writeLineToFile(fileName: string, line: string) {

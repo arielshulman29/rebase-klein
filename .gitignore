@@ -6,4 +6,7 @@ node_modules
 /temp
 /cache
 bigfile.txt
+bigfile_1.txt
 createBigFile.ts
+nums_50_mil.txt
+nums_200_mil.txt
