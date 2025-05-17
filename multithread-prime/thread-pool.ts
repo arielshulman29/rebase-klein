@@ -5,6 +5,7 @@ export class ThreadPool {
     private threadsStatus: Array<boolean> = [];
     private numOfWorkers: number = 10;
     private primeCount: number = 0;
+    private workloadCount: number = 0;
 
     constructor(workerPath: string, numOfWorkers: number) {
         this.threads = [];
@@ -15,10 +16,14 @@ export class ThreadPool {
         for(let i = 0; i < this.numOfWorkers; i++) {
             const worker = new Worker(workerPath);
             worker.on('message', (message) => {
-                console.log(`Worker ${i} sent message ${message}`)
-                if(typeof message === "number"){ 
-                    this.primeCount += message;
-                    console.log(`Prime count: ${this.primeCount}`)
+                if(typeof message === "object" && message.primeCount&&message.id===i){ 
+                    this.primeCount += message.primeCount;
+                    // console.log(`worker ${i} finished`)
+                    this.threadsStatus[i] = false;
+                }
+                if(typeof message === "object" && message.id === i && message.message === "started"){ 
+                    // console.log(`Worker ${i} started`)
+                    this.threadsStatus[i] = true;
                 }
             });
 
@@ -26,20 +31,31 @@ export class ThreadPool {
         }
     }
     sendWork(numbers: number[]) {
-        const freeThreadIndex = this.threadsStatus.findIndex((status) => status === false);
-        
+        const currentIndex = this.workloadCount%this.threadsStatus.length;
+        const freeThreadIndex = this.threadsStatus[currentIndex] ? this.threadsStatus.findIndex((status) => status === false) : currentIndex;
+        if(freeThreadIndex === -1) {
+            console.log("No free threads")
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    resolve(this.sendWork(numbers));
+                }, 100);
+            });
+        }
+        this.workloadCount++;
         const worker = this.threads[freeThreadIndex]!;
-        this.threadsStatus[freeThreadIndex] = true;
         return new Promise((resolve) => {
-            this.threadsStatus[freeThreadIndex] = false;
-            resolve(worker.postMessage(numbers));
-            this.threadsStatus[freeThreadIndex] = true;
-            
+            resolve(worker.postMessage({numbers,id: freeThreadIndex}));
         });
     }
-    tearUp() {
+    async tearUp(): Promise<void> {
+        console.log("Threads count: ", this.threads.length)
+        if(this.threadsStatus.some((status) => status === true)) {
+            console.log("Waiting for threads to finish")
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            return await this.tearUp();
+        }
         for(const worker of this.threads) {
-            worker.terminate();
+            await worker.terminate();
         }
     }
     getPrimeCount() {

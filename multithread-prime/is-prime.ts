@@ -18,6 +18,11 @@ Calculations:
 50,000,000 lines = 50,000,000*8bytes = 400,000,000 bytes = 400MB
 200,000,000 lines = 200,000,000*8bytes = 1,600,000,000 bytes = 1,600MB = 1.6GB
 
+1m numbers = 1M*8bytes = 8,000,000 bytes = 8MB
+8MB*16 = 128MB per 16 cores
+if we have max 16 chunks int he queue that's another 128MB
+so all together 256MB
+
 
 Strategy:
 start without multithreading:
@@ -53,9 +58,9 @@ class ReadFileToQueue {
         this.maxQueueSize = maxQueueSize;
     }
 
-    async enqueueChunk() {
+    async enqueueChunk(chunkCount?: number) {
         if(this.numbersQueue.length >= this.maxQueueSize || this.done) return;
-        while(this.numbersQueue.length < this.maxQueueSize && !this.done) {
+        for(let i = 0; i < (chunkCount || this.maxQueueSize); i++) {
             const chunk = await this.chunkGenerator.next()
             if(chunk.done) {
                 this.done = true;
@@ -69,7 +74,7 @@ class ReadFileToQueue {
         while (this.numbersQueue.length > 0) {
             const chunk = this.numbersQueue.shift();
             yield chunk;
-            await this.enqueueChunk();
+            if(this.numbersQueue.length < this.maxQueueSize) await this.enqueueChunk(2);
         }
     }
     [Symbol.asyncIterator]() {
@@ -98,19 +103,16 @@ class ReadFileToQueue {
 async function largeScalePrimeCountMultiThreaded(filePath: string) {
     const startTime = performance.now();
     const threadPool = new ThreadPool("./worker.ts", 16);
-    const numbersQueue = new ReadFileToQueue(filePath, 10, 16);
-    // const numbersQueue = new ReadFileToQueue(filePath, 10_000, 16);
+    const numbersQueue = new ReadFileToQueue(filePath, 1_000_000, 10);
     let chunkCount = 0;
     await numbersQueue.enqueueChunk();
     for await (const chunk of numbersQueue) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
         chunkCount++;
         console.log(`Chunk: ${chunkCount}`);
         if(chunk) await threadPool.sendWork(chunk);
-        await numbersQueue.enqueueChunk();
     }
+    await threadPool.tearUp();
     const primeCount = threadPool.getPrimeCount();
-    threadPool.tearUp();
     const endTime = performance.now();
     console.log(`Prime count: ${primeCount} Time it took: ${(endTime - startTime)/1000} seconds`);
 }
@@ -118,6 +120,7 @@ async function largeScalePrimeCountMultiThreaded(filePath: string) {
 const asyncWrapper = async (func: () => Promise<void>) => {
     await func();
 }
-asyncWrapper(()=>largeScalePrimeCountMultiThreaded("./smallTest.txt"));
+asyncWrapper(()=>largeScalePrimeCountMultiThreaded("./nums_50_mil.txt"));
+// asyncWrapper(()=>largeScalePrimeCountMultiThreaded("./smallTest.txt"));
 //suposebly from the small file we should have 46 primes (23 not prime)
 // largeScalePrimeCountSingleThreaded("nums_50_mil.txt") //took 363.559 seconds
