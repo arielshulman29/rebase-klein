@@ -6,8 +6,9 @@ import * as fs from 'fs/promises';
 describe('HTTP Server Integration Tests', () => {
     let app: express.Application;
     let httpServer: HttpServer;
-    const testBlobsDir = './blobs';
-    const testTempBlobsDir = './temp-blobs';
+    const testBlobsDir = './http-server/__tests__/blobs';
+    const testTempBlobsDir = './http-server/__tests__/temp-blobs';
+    const testFilesWorkerDir = './http-server/files-worker.ts';
 
     beforeAll(async () => {
         // Clean up test directories
@@ -18,7 +19,7 @@ describe('HTTP Server Integration Tests', () => {
         await fs.mkdir(testBlobsDir, { recursive: true });
         await fs.mkdir(testTempBlobsDir, { recursive: true });
 
-        httpServer = new HttpServer();
+        httpServer = new HttpServer(testBlobsDir, testTempBlobsDir, testFilesWorkerDir);
         await httpServer.warmUp();
         
         app = express();
@@ -32,55 +33,33 @@ describe('HTTP Server Integration Tests', () => {
         });
     });
 
-    afterAll(async () => {
-        await httpServer.tearDown();
-    });
+    // afterAll(async () => {
+        // await httpServer.tearDown();
+    // });
 
     describe('POST /blobs/:id', () => {
-        it('should successfully store a blob with valid data', async () => {
+
+        it('should handle content length correctly', async () => {
             const testData = Buffer.from('test data');
+            const contentLength = testData.length;
+            
             const response = await request(app)
                 .post('/blobs/test123')
                 .set('Content-Type', 'text/plain')
-                .set('Content-Length', testData.length.toString())
+                .set('Content-Length', contentLength.toString())
                 .send(testData);
 
             expect(response.status).toBe(200);
-            expect(response.text).toBe('Upload complete');
+            
+            // Verify the blob was stored correctly
+            const getResponse = await request(app)
+                .get('/blobs/test123')
+                .responseType('blob');  // This ensures we get the raw buffer
+
+            expect(getResponse.status).toBe(200);
+            expect(getResponse.body.toString()).toBe('test data');
         });
 
-        // it('should reject blob with invalid ID characters', async () => {
-        //     const testData = Buffer.from('test data');
-        //     const response = await request(app)
-        //         .post('/blobs/test@123')
-        //         .set('Content-Type', 'text/plain')
-        //         .set('Content-Length', testData.length.toString())
-        //         .send(testData);
-
-        //     expect(response.status).toBe(400);
-        //     expect(response.text).toContain('Id contains invalid characters');
-        // });
-
-        // it('should store and retrieve custom headers', async () => {
-        //     const testData = Buffer.from('test data');
-        //     const customHeader = 'x-rebase-custom';
-        //     const customValue = 'test-value';
-
-        //     // Store blob with custom header
-        //     await request(app)
-        //         .post('/blobs/test123')
-        //         .set('Content-Type', 'text/plain')
-        //         .set('Content-Length', testData.length.toString())
-        //         .set(customHeader, customValue)
-        //         .send(testData);
-
-        //     // Retrieve blob and verify headers
-        //     const response = await request(app)
-        //         .get('/blobs/test123');
-
-        //     expect(response.status).toBe(200);
-        //     expect(response.headers[customHeader.toLowerCase()]).toBe(customValue);
-        // });
     });
 
     // describe('GET /blobs/:id', () => {

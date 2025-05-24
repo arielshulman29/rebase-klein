@@ -4,28 +4,28 @@ export type BlobStats = {
     totalSize: number;
 }
 
-export const enum Status {
-    started = 'started',
-    done = 'done',
-    error = 'error',
-    processed = 'processed'
-}
+export const Status = {
+    started : 'started',
+    done : 'done',
+    error : 'error',
+    processed : 'processed'
+} as const;
 
 
-export const enum MessageType {
-    writeToFile = 'writeToFile',
-    swapFiles = 'swapFiles',
-}
+export const MessageType = {
+    writeToFile : 'writeToFile',
+    swapFiles : 'swapFiles',
+} as const;
 
 export type WorkerPayload = {
-    type: MessageType.writeToFile
+    type: typeof MessageType.writeToFile
     path: string;
     buffer: Buffer<ArrayBuffer>;
     id: string;
     contentLength: number;
     isEOF: boolean;
 } | {
-    type: MessageType.swapFiles
+    type: typeof MessageType.swapFiles
     sourceFilePath: string;
     destinationFilePath: string;
     id: string;
@@ -33,11 +33,11 @@ export type WorkerPayload = {
 
 
 export type WorkerResponse = {
-    type: MessageType.writeToFile
-    status: Status.processed | Status.done
+    type: typeof MessageType.writeToFile
+    status: typeof Status.processed | typeof Status.done
     id: string;
     count: number;
 } | {
-    type: MessageType.swapFiles
-    status: Status.done
+    type: typeof MessageType.swapFiles
+    status: typeof Status.done
 }

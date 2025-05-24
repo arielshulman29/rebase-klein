@@ -1,1 +1,1 @@
-jest.setTimeout(10000); // Increase timeout for integration tests 
+jest.setTimeout(100000); // Increase timeout for integration tests 

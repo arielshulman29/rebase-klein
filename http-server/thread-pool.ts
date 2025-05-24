@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import { MessageType, Status, WorkerResponse, type BlobStats, type WorkerPayload } from './types';
+import { MessageType, Status, type WorkerResponse, type WorkerPayload } from './types.ts';
 
 export class ThreadPool {
     private threads: Array<Worker> = [];
@@ -7,7 +7,7 @@ export class ThreadPool {
     private numOfWorkers: number = 10;
     isWarm: boolean = false;
 
-    constructor(workerPath: string, numOfWorkers: number, onDone: (status: Status, blobStats: BlobStats) => void, onProcessed?: (status: Status, blobStats: BlobStats) => void) {
+    constructor(workerPath: string, numOfWorkers: number) {
         this.threads = [];
         this.numOfWorkers = numOfWorkers;
         this.threadsStatus = Array.from({ length: this.numOfWorkers }, () => false);
@@ -19,9 +19,13 @@ export class ThreadPool {
             worker.on('message', (message: WorkerResponse) => {
                 if (message.type === MessageType.writeToFile) {
                     if(message.status === Status.done) {
-                        onDone(message.status, { id: message.id, headersCount: message.count, totalSize: message.count });
+                        worker.postMessage({ type: MessageType.writeToFile, id: message.id, status: message.status, count: message.count });
                     } else {
-                        onProcessed?.(message.status, { id: message.id, headersCount: message.count, totalSize: message.count });
+                        worker.postMessage({ type: MessageType.writeToFile, id: message.id, status: message.status, count: message.count });
+                    }
+                } else if (message.type === MessageType.swapFiles) {
+                    if(message.status === Status.done) {
+                        worker.postMessage({ type: MessageType.swapFiles, status: message.status });
                     }
                 }
             });
@@ -68,7 +72,7 @@ export class ThreadPool {
             for (const worker of this.threads) {
                 worker.terminate();
             }
-        }, 5000); // 5 second timeout
+        }, 1000); // 5 second timeout
 
         try {
             while (this.threadsStatus.some((status) => status === true)) {

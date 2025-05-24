@@ -131,16 +131,16 @@ processing of a request is done in 3 steps:
 */
 
 import { createHash } from 'crypto';
-import { ThreadPool } from './thread-pool';
+import { ThreadPool } from './thread-pool.ts';
 import * as os from "node:os";
 import * as path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import * as express from 'express';
 import * as fs from 'node:fs';
 import { pipeline, Writable } from 'node:stream';
-import { hasFile } from '../file-service';
-import { IncomingHttpHeaders } from 'node:http';
-import { MessageType, WorkerPayload } from './types';
+import { hasFile } from '../file-service.ts';
+import type { IncomingHttpHeaders } from 'node:http';
+import { MessageType, type WorkerPayload } from './types.ts';
 
 export const MAX_LENGTH = 10_000_000;
 export const MAX_DISK_QUOTA = 1_000_000_000;
@@ -156,8 +156,9 @@ function hashString(str: string): Hashed {
 }
 
 export class HttpServer {
-    private readonly blobsFolder: string = "./blobs";
-    private readonly tempBlobsFolder: string = "./temp-blobs";
+    private readonly blobsFolder: string;
+    private readonly tempBlobsFolder: string;
+    private readonly filesWorkerPath: string;
 
     takenDiskSpace: number = 0;
     headersCount: number = 0;
@@ -166,14 +167,18 @@ export class HttpServer {
     isWarm: boolean = false;
 
 
-    constructor() {
+
+    constructor(blobsFolderPath: string, tempBlobsFolderPath: string, filesWorkerPath: string) {
         this.takenDiskSpace = 0;
         this.headersCount = 0;
+        this.blobsFolder = blobsFolderPath;
+        this.tempBlobsFolder = tempBlobsFolderPath;
+        this.filesWorkerPath = filesWorkerPath;
     }
 
     async warmUp() {
         // request finalizers are for storing data but we want to maintain more of the resources for also handling requests
-        this.threadPool = new ThreadPool("./files-worker.ts", os.cpus().length, () => { });
+        this.threadPool = new ThreadPool(this.filesWorkerPath, os.cpus().length);
         await this.threadPool.getIsWarm();
         this.isWarm = this.threadPool.isWarm;
         return this.isWarm;
@@ -212,7 +217,8 @@ export class HttpServer {
             headers.set("content-type", "application/octet-stream");
         }
         res.setHeaders(headers);
-        const readStream = fs.createReadStream(this.getPathOfPayload(id));
+        const pathOfPayload = this.getPathOfPayload(id);
+        const readStream = fs.createReadStream(pathOfPayload);
         pipeline(readStream, res, (err) => {
             if (err) {
                 console.error('Pipeline failed', err);
@@ -228,6 +234,7 @@ export class HttpServer {
         const processedHeaders: Record<string, string> = {};
         let headersSize = 0;
         let headersCount = 0;
+        let headersString = "";
         for (const [key, value] of Object.entries(headers)) {
             if (key && value && (key.toLowerCase().startsWith("x-rebase-") || key.toLowerCase() === "content-type")) {
                 if (key.length + value.length > MAX_HEADER_LENGTH) {
@@ -236,18 +243,19 @@ export class HttpServer {
                 processedHeaders[key.toLowerCase()] = Array.isArray(value) ? value.join(", ") : value;
                 headersSize += key.length + value.length;
                 headersCount++;
+                headersString += `${key}: ${value}\n`;
             }
         }
-        const processedHeadersBuffer = Buffer.from(JSON.stringify(processedHeaders));
+        const processedHeadersBuffer = Buffer.from(headersString);
         return [processedHeadersBuffer, headersSize, headersCount];
     }
 
     async post(id: string, req: express.Request, res: express.Response) {
-        if(id.length > MAX_ID_LENGTH) {
+        if (id.length > MAX_ID_LENGTH) {
             res.status(400).send(`Id length exceeds maximum ${MAX_ID_LENGTH}`);
             return;
         }
-        if(!(id.match(/^[a-zA-Z0-9._-]+$/))) {
+        if (!(id.match(/^[a-zA-Z0-9._-]+$/))) {
             res.status(400).send(`Id contains invalid characters. Allowed characters: a-z, A-Z, 0-9, dot (.), underscore (_), minus (-).`);
             return;
         }
@@ -255,25 +263,27 @@ export class HttpServer {
         if (headersCount + this.headersCount > MAX_HEADER_COUNT) {
             throw new Error(`Headers size exceeds maximum`);
         }
-        const workerId = await this.threadPool!.getAvailableWorkerId();
+        const headersWorkerId = await this.threadPool!.getAvailableWorkerId();
+        const payloadWorkerId = await this.threadPool!.getAvailableWorkerId();
         const tempHeadersPath = path.join(this.tempBlobsFolder, id, "headers.txt");
         const tempPayloadPath = path.join(this.tempBlobsFolder, id, "payload.bin");
         const contentLength = parseInt(req.headers['content-length']!);
         let payloadSize = 0;
-        const sendPayloadToWorker = (chunk: Buffer<ArrayBuffer>, path: string) => {
+        const sendPayloadToWorker = async (chunk: Buffer<ArrayBuffer>, path: string) => {
             if ((payloadSize + chunk.length) > contentLength) {
                 throw new Error(`Content-Length header is invalid. Content-Length: ${contentLength}, Payload size: ${payloadSize}`);
             }
             payloadSize += chunk.length;
             const isEOF = payloadSize === contentLength;
             const payload: WorkerPayload = { type: MessageType.writeToFile, path, buffer: chunk, id, contentLength: payloadSize, isEOF };
-            this.threadPool!.sendBufferToWorker(payload, workerId);
+            await this.threadPool!.sendBufferToWorker(payload, payloadWorkerId);
         }
-        const sendHeadersToWorker = (chunk: Buffer<ArrayBuffer>, path: string) => {
-            const payload: WorkerPayload = { type: MessageType.writeToFile, path, buffer: chunk, id, contentLength: chunk.length, isEOF:true };
-            this.threadPool!.sendBufferToWorker(payload, workerId);
+        const sendHeadersToWorker = async (chunk: Buffer<ArrayBuffer>, path: string) => {
+            const payload: WorkerPayload = { type: MessageType.writeToFile, path, buffer: chunk, id, contentLength: chunk.length, isEOF: true };
+            await this.threadPool!.sendBufferToWorker(payload, headersWorkerId);
+            this.threadPool!.freeWorker(headersWorkerId);
         }
-        sendHeadersToWorker(processedHeaders, tempHeadersPath);
+        await sendHeadersToWorker(processedHeaders, tempHeadersPath);
 
         const writable = new Writable({
             write(this, chunk, encoding, callback) {
@@ -290,18 +300,19 @@ export class HttpServer {
         });
 
         req.on('end', () => {
-            this.finalizeRequest(id, tempPayloadPath, tempHeadersPath, headersSize, contentLength);
+            this.threadPool!.freeWorker(payloadWorkerId);
+            this.finalizeRequest(id, tempPayloadPath, tempHeadersPath, headersSize, headersCount, contentLength);
             res.send('Upload complete');
         });
 
 
     };
 
-    async finalizeRequest(id: string, payloadPath: string, headersPath: string, headersLength: number, contentLength: number) {
-        if((headersLength + contentLength + this.takenDiskSpace) > MAX_DISK_QUOTA) {
+    async finalizeRequest(id: string, payloadPath: string, headersPath: string, headersLength: number, headersCount: number, contentLength: number) {
+        if ((headersLength + contentLength + this.takenDiskSpace) > MAX_DISK_QUOTA) {
             throw new Error(`Disk quota exceeded`);
         }
-        if((this.headersCount + headersLength) > MAX_HEADER_COUNT) {
+        if ((this.headersCount + headersCount) > MAX_HEADER_COUNT) {
             throw new Error(`Headers count exceeds maximum`);
         }
         const hash = hashString(id);
@@ -310,11 +321,11 @@ export class HttpServer {
         const destinationPayloadPath = path.join(this.blobsFolder, hash.slice(0, 2), hash, "payload.bin");
         const destinationHeadersPath = path.join(this.blobsFolder, hash.slice(0, 2), hash, "headers.txt");
         const workerId = await this.threadPool!.getAvailableWorkerId();
-        await Promise.allSettled([
-            this.threadPool!.sendSwapFilesToWorker(payloadPath, destinationPayloadPath, workerId),
-            this.threadPool!.sendSwapFilesToWorker(headersPath, destinationHeadersPath, workerId)
-        ]);
+        await this.threadPool!.sendSwapFilesToWorker(payloadPath, destinationPayloadPath, workerId);
         this.threadPool!.freeWorker(workerId);
+        const workerId2 = await this.threadPool!.getAvailableWorkerId();
+        await this.threadPool!.sendSwapFilesToWorker(headersPath, destinationHeadersPath, workerId2);
+        this.threadPool!.freeWorker(workerId2);
         this.hashToStats.set(hash, { id, headersCount: headersLength, totalSize: headersLength + contentLength });
         this.headersCount -= currentHeadersCount;
         this.headersCount += headersLength;
@@ -323,20 +334,3 @@ export class HttpServer {
     }
 }
 
-const httpServer = new HttpServer();
-async function startServer() {
-    await httpServer.warmUp();
-    const app = express();
-    app.post("/blobs/:id", (req, res) => {
-        const id = req.params.id;
-        httpServer.post(id, req, res);
-    });
-    app.get("/blobs/:id", async (req, res) => {
-        const id = req.params.id;
-        httpServer.get(id, res);
-    });
-    app.delete("/blobs/:id", (req, res) => {
-        const id = req.params.id;
-    });
-}
-startServer();

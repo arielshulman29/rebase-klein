@@ -1,6 +1,5 @@
 import * as readline from 'node:readline/promises';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 
 
 
@@ -49,43 +48,3 @@ export async function writeLineToFile(fileName: string, line: string) {
     fs.appendFileSync(fileName, line + "\n")
 }
 
-
-
-export async function writeBufferToFile(fileName: string, buffer: Buffer) {
-    fs.appendFileSync(fileName, buffer)
-}
-
-export async function swapFiles(fileNameToOverride: string, fileNameToOverrideWith: string): Promise<void> {
-    try {
-        if(!fs.existsSync(fileNameToOverride)) {
-            const dir = path.dirname(fileNameToOverride);
-            if(!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-            }
-            await fs.rename(fileNameToOverrideWith, fileNameToOverride, (err) => {
-                if (err) {
-                    throw err;
-                }
-            });
-            return;
-        }
-        const tempBackup = `${fileNameToOverride}.bak`;
-        await fs.rename(fileNameToOverride, tempBackup, (err) => {
-            if (err) {
-                throw err;
-            }
-        });
-        await fs.rename(fileNameToOverrideWith, fileNameToOverride, (err) => {
-            if (err) {
-                throw err;
-            }
-        });
-        await fs.rename(tempBackup, fileNameToOverrideWith, (err) => {
-            if (err) {
-                throw err;
-            }
-        });
-    } catch (err) {
-        throw err;
-    }
-}
