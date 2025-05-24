@@ -260,20 +260,24 @@ export class HttpServer {
         const tempPayloadPath = path.join(this.tempBlobsFolder, id, "payload.bin");
         const contentLength = parseInt(req.headers['content-length']!);
         let payloadSize = 0;
-        const sendToWorker = (chunk: Buffer<ArrayBuffer>, path: string) => {
+        const sendPayloadToWorker = (chunk: Buffer<ArrayBuffer>, path: string) => {
             if ((payloadSize + chunk.length) > contentLength) {
                 throw new Error(`Content-Length header is invalid. Content-Length: ${contentLength}, Payload size: ${payloadSize}`);
             }
             payloadSize += chunk.length;
-            const isEOF = payloadSize + chunk.length === contentLength;
+            const isEOF = payloadSize === contentLength;
             const payload: WorkerPayload = { type: MessageType.writeToFile, path, buffer: chunk, id, contentLength: payloadSize, isEOF };
             this.threadPool!.sendBufferToWorker(payload, workerId);
         }
-        sendToWorker(processedHeaders, tempHeadersPath);
+        const sendHeadersToWorker = (chunk: Buffer<ArrayBuffer>, path: string) => {
+            const payload: WorkerPayload = { type: MessageType.writeToFile, path, buffer: chunk, id, contentLength: chunk.length, isEOF:true };
+            this.threadPool!.sendBufferToWorker(payload, workerId);
+        }
+        sendHeadersToWorker(processedHeaders, tempHeadersPath);
 
         const writable = new Writable({
             write(this, chunk, encoding, callback) {
-                sendToWorker(chunk, tempPayloadPath);
+                sendPayloadToWorker(chunk, tempPayloadPath);
                 callback();
             }
         });
